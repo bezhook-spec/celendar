@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="PDR Календарь">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
   <title>PDR Календарь</title>
   <style>
@@ -37,7 +37,7 @@
       font-family: var(--font-text);
     }
     * { box-sizing: border-box; }
-    html, body { min-height: 100%; background: var(--bg); }
+    html, body { min-height: 100%; background: var(--bg); overscroll-behavior-y: auto; }
     body {
       margin: 0;
       color: var(--text);
@@ -123,6 +123,18 @@
     }
     .period-sub { display: none; color: var(--muted); font-size: 12px; margin-top: 3px; }
     .icon-btn { width: 44px; min-width: 44px; padding: 0; display: grid; place-items: center; font-size: 24px; }
+    .install-btn {
+      display: none;
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 13px;
+      background: rgba(80,200,120,.16);
+      color: var(--accent);
+      border: 1px solid rgba(80,200,120,.42);
+      font-weight: 720;
+    }
+    .install-btn.show { display: inline-grid; place-items: center; }
+
     .primary { background: var(--accent); color: #06130b; font-weight: 760; }
     .danger { background: rgba(226,93,93,.18); color: #ffd7d7; }
     .nav-row { justify-content: space-between; }
@@ -206,7 +218,7 @@
       background: transparent;
       padding: 2px;
       overflow: hidden;
-      touch-action: none;
+      touch-action: pan-y;
       display: flex;
       flex-direction: column;
       align-items: stretch;
@@ -273,7 +285,7 @@
       overflow: visible;
       box-sizing: border-box;
       font-family: var(--font-text);
-      touch-action: none;
+      touch-action: pan-y;
       user-select: none;
     }
     .entry-chip.base { background: rgba(226,93,93,.28); color: var(--base); }
@@ -404,7 +416,7 @@
       box-shadow: none;
       padding: 8px 10px;
       overflow: hidden;
-      touch-action: none;
+      touch-action: pan-y;
       user-select: none;
     }
     .time-card.base { background: rgba(226,93,93,.28); color: var(--base); }
@@ -423,7 +435,7 @@
       box-shadow: inset 0 0 0 1px currentColor;
       padding: 11px 12px;
       font-weight: 720;
-      touch-action: none;
+      touch-action: pan-y;
     }
     .all-day-card small {
       color: var(--soft);
@@ -591,6 +603,7 @@
             <div class="period-sub" id="periodSub">Календарь мастера</div>
           </div>
         </div>
+        <button class="install-btn" id="installBtn" type="button">Установить</button>
         <button class="icon-btn" id="resetBtn" title="Сбросить демо">↺</button>
       </div>
       <div class="nav-row">
@@ -1099,16 +1112,45 @@
     function startPointerDrag(event) {
       if (event.button && event.button !== 0) return;
       const source = event.currentTarget;
-      state.drag = { id: source.dataset.id, source, x: event.clientX, y: event.clientY, moved: false, ghost: null, target: null };
+      state.drag = {
+        id: source.dataset.id,
+        source,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        moved: false,
+        active: event.pointerType !== 'touch',
+        ghost: null,
+        target: null,
+        timer: null
+      };
       source.setPointerCapture?.(event.pointerId);
       source.addEventListener('pointermove', pointerMove);
       source.addEventListener('pointerup', pointerEnd, { once: true });
       source.addEventListener('pointercancel', pointerEnd, { once: true });
+      if (event.pointerType === 'touch') {
+        state.drag.timer = setTimeout(() => {
+          if (!state.drag) return;
+          state.drag.active = true;
+          state.drag.moved = true;
+          state.drag.source.classList.add('dragging');
+          if (!state.drag.ghost) state.drag.ghost = createDragGhost(state.drag.id);
+          positionDragGhost(state.drag.x, state.drag.y);
+          updateDropTarget(state.drag.x, state.drag.y);
+        }, 280);
+      }
     }
     function pointerMove(event) {
       if (!state.drag) return;
-      const moved = Math.abs(event.clientX - state.drag.x) + Math.abs(event.clientY - state.drag.y) > 10;
-      if (moved) {
+      const dx = event.clientX - state.drag.x;
+      const dy = event.clientY - state.drag.y;
+      const distance = Math.abs(dx) + Math.abs(dy);
+      if (!state.drag.active && distance > 12) {
+        clearTimeout(state.drag.timer);
+        state.drag.timer = null;
+        return;
+      }
+      if (state.drag.active && distance > 6) {
         event.preventDefault();
         state.drag.moved = true;
         state.drag.source.classList.add('dragging');
@@ -1120,10 +1162,11 @@
     function pointerEnd(event) {
       const drag = state.drag;
       if (!drag) return;
+      clearTimeout(drag.timer);
       drag.source.classList.remove('dragging');
       drag.source.removeEventListener('pointermove', pointerMove);
       const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.month-day, .grid-cell');
-      if (drag.moved && target?.dataset.date) moveEntry(drag.id, target.dataset.date, target.dataset.time);
+      if (drag.moved && drag.active && target?.dataset.date) moveEntry(drag.id, target.dataset.date, target.dataset.time);
       clearDropTarget();
       drag.ghost?.remove();
       setTimeout(() => { state.drag = null; }, 250);
@@ -1236,9 +1279,31 @@
   </script>
 
   <script>
+    let deferredInstallPrompt = null;
+    const installButton = document.getElementById('installBtn');
+
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      installButton?.classList.add('show');
+    });
+
+    installButton?.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      installButton.classList.remove('show');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      installButton?.classList.remove('show');
+    });
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' })
+        navigator.serviceWorker.register('./sw.js')
           .then(reg => reg.update())
           .catch(err => console.warn('Service worker registration failed:', err));
       });
