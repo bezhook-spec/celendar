@@ -9,7 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="PDR Календарь">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <link rel="manifest" href="./manifest.json">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
   <title>PDR Календарь</title>
   <style>
@@ -1236,13 +1237,10 @@
 
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', async () => {
-        try {
-          const registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-          registration.update();
-        } catch (error) {
-          console.warn('Service worker registration failed:', error);
-        }
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(reg => reg.update())
+          .catch(err => console.warn('Service worker registration failed:', err));
       });
     }
   </script>
