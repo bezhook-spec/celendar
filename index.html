@@ -46,7 +46,7 @@
         linear-gradient(180deg, #131716 0%, #101312 50%, #0d100f 100%);
       overflow-x: hidden;
     }
-    button, input { font: inherit; letter-spacing: 0; }
+    button, input, textarea { font: inherit; letter-spacing: 0; }
     button {
       border: 0;
       min-height: 44px;
@@ -81,7 +81,7 @@
       display: block;
       height: calc(var(--topbar-height) + 12px);
     }
-    .title-row, .nav-row, .mode-tabs, .sheet-head, .duration-grid {
+    .title-row, .nav-row, .mode-tabs, .sheet-head {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -497,9 +497,8 @@
     }
     .field { margin-bottom: 9px; }
     label { display: block; margin: 0 0 5px 3px; color: var(--muted); font-size: 12px; font-weight: 560; }
-    input {
+    input, textarea {
       width: 100%;
-      min-height: 44px;
       border: 1px solid rgba(255,255,255,.1);
       border-radius: 16px;
       padding: 11px 13px;
@@ -507,20 +506,26 @@
       color: var(--text);
       background: rgba(255,255,255,.055);
     }
-    input:focus { border-color: rgba(80,200,120,.55); }
-    .type-grid, .duration-grid {
+    input { min-height: 44px; }
+    textarea {
+      min-height: 78px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+    input:focus, textarea:focus { border-color: rgba(80,200,120,.55); }
+    .type-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 7px;
     }
-    .type-grid button, .duration-grid button {
+    .type-grid button {
       min-height: 40px;
       padding: 0 8px;
       color: var(--muted);
       font-weight: 680;
       border-radius: 14px;
     }
-    .type-grid button.active, .duration-grid button.active {
+    .type-grid button.active {
       color: #07140c;
       background: var(--accent);
     }
@@ -530,6 +535,17 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+    .time-wheel-col {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+    .time-wheel-title {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 680;
+      text-align: center;
     }
     .time-wheel {
       height: 112px;
@@ -579,8 +595,7 @@
       .day-num { height: 22px; font-size: 16px; margin-bottom: 4px; }
       .day-num-inner { width: 22px; height: 22px; }
       .mode-tabs button { font-size: 13px; }
-      .type-grid, .duration-grid { grid-template-columns: 1fr 1fr 1fr; }
-      .duration-grid { grid-template-columns: 1fr 1fr; }
+      .type-grid { grid-template-columns: 1fr 1fr 1fr; }
       .sheet-actions { grid-template-columns: 1fr; }
       :root { --slot-height: 55px; --time-col: 46px; }
     }
@@ -635,6 +650,7 @@
         <input type="hidden" id="entryDuration" value="60">
         <input type="hidden" id="entryAllDay" value="false">
         <input type="hidden" id="entryTime" value="10:00">
+        <input type="hidden" id="entryEndTime" value="11:00">
 
         <div class="field">
           <label>Название записи</label>
@@ -650,23 +666,22 @@
         </div>
 
         <div class="field" id="timeField">
-          <label>Время начала</label>
+          <label>Время записи</label>
           <div class="time-wheel-wrap">
-            <div class="time-wheel" id="hourWheel"></div>
-            <div class="time-wheel" id="minuteWheel"></div>
+            <div class="time-wheel-col">
+              <div class="time-wheel-title">Начало</div>
+              <div class="time-wheel" id="hourWheel"></div>
+            </div>
+            <div class="time-wheel-col">
+              <div class="time-wheel-title">Конец</div>
+              <div class="time-wheel" id="minuteWheel"></div>
+            </div>
           </div>
         </div>
 
         <div class="field">
-          <label>Продолжительность</label>
-          <div class="duration-grid">
-            <button type="button" class="active" data-duration="60">1 час</button>
-            <button type="button" data-duration="120">2 часа</button>
-            <button type="button" data-duration="180">3 часа</button>
-            <button type="button" data-duration="240">4 часа</button>
-            <button type="button" data-duration="300">5 часов</button>
-            <button type="button" data-duration="all">Весь день</button>
-          </div>
+          <label>Комментарий</label>
+          <textarea id="commentInput" placeholder="Что важно помнить по записи"></textarea>
         </div>
 
         <div class="sheet-actions">
@@ -778,6 +793,11 @@
       for (let min = SETTINGS.workStart * 60; min < SETTINGS.workEnd * 60; min += SETTINGS.stepMinutes) out.push(minutesToTime(min));
       return out;
     }
+    function wheelTimes() {
+      const out = [];
+      for (let min = SETTINGS.workStart * 60; min <= SETTINGS.workEnd * 60; min += 10) out.push(minutesToTime(min));
+      return out;
+    }
     function formatPeriod() {
       if (state.view === 'month') return state.currentVisibleMonth.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
       return state.selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -797,6 +817,12 @@
     }
     function entryById(id) {
       return state.entries.find(e => e.id === id);
+    }
+    function entryEndTime(entry) {
+      return entry.endTime || addMinutes(entry.startTime || '10:00', entry.durationMinutes || 60);
+    }
+    function durationBetween(startTime, endTime) {
+      return Math.max(10, timeToMinutes(endTime) - timeToMinutes(startTime));
     }
 
     // render
@@ -955,14 +981,15 @@
       const slotHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--slot-height'));
       const startOffset = Math.max(0, timeToMinutes(entry.startTime) - SETTINGS.workStart * 60);
       const top = startOffset / SETTINGS.stepMinutes * slotHeight + 4;
-      const height = Math.max(48, entry.durationMinutes / SETTINGS.stepMinutes * slotHeight - 8);
-      const hours = entry.durationMinutes / 60;
-      const duration = Number.isInteger(hours) ? `${hours} ч` : `${entry.durationMinutes} мин`;
+      const endTime = entryEndTime(entry);
+      const durationMinutes = durationBetween(entry.startTime, endTime);
+      const height = Math.max(48, durationMinutes / SETTINGS.stepMinutes * slotHeight - 8);
+      const comment = entry.comment ? `<div class="meta">${escapeHTML(entry.comment)}</div>` : '';
       return `
         <article class="time-card ${entry.type}" data-id="${entry.id}" style="top:${top}px;height:${height}px">
-          <div class="time">${entry.startTime}</div>
+          <div class="time">${entry.startTime}–${endTime}</div>
           <div class="name">${escapeHTML(entry.title)}</div>
-          <div class="meta">${duration}</div>
+          ${comment}
         </article>
       `;
     }
@@ -975,24 +1002,24 @@
         type: 'mobile',
         date: dateValue,
         startTime: timeValue,
+        endTime: addMinutes(timeValue, 60),
         durationMinutes: 60,
-        allDay: false
+        allDay: false,
+        comment: ''
       };
     }
     function setType(type) {
       entryType.value = type;
       document.querySelectorAll('[data-type]').forEach(btn => btn.classList.toggle('active', btn.dataset.type === type));
     }
-    function setDuration(value) {
-      const allDay = value === 'all';
-      entryAllDay.value = allDay ? 'true' : 'false';
-      entryDuration.value = allDay ? '0' : value;
-      timeField.style.display = allDay ? 'none' : 'block';
-      document.querySelectorAll('[data-duration]').forEach(btn => btn.classList.toggle('active', btn.dataset.duration === value));
-    }
-    function setTime(value) {
-      entryTime.value = normalizeWorkTime(value);
-      renderTimeWheels(entryTime.value);
+    function setTime(startValue, endValue = addMinutes(startValue, 60)) {
+      const startTime = normalizeStartTime(startValue);
+      const endTime = normalizeEndTime(startTime, endValue);
+      entryTime.value = startTime;
+      entryEndTime.value = endTime;
+      entryDuration.value = String(durationBetween(startTime, endTime));
+      entryAllDay.value = 'false';
+      renderTimeWheels(startTime, endTime);
     }
     function normalizeWorkTime(value = '10:00') {
       let [hour, minute] = value.split(':').map(Number);
@@ -1004,22 +1031,37 @@
       }
       return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
     }
-    function renderTimeWheels(value = entryTime.value || '10:00') {
-      const [activeHour, activeMinute] = normalizeWorkTime(value).split(':');
-      const hours = [];
-      for (let h = 9; h <= 19; h++) hours.push(String(h).padStart(2, '0'));
-      const minutes = ['00', '10', '20', '30', '40', '50'];
-      hourWheel.innerHTML = `<div class="time-option spacer"></div>${hours.map(hour => `<div class="time-option ${hour === activeHour ? 'active' : ''}" data-wheel-hour="${hour}">${hour}</div>`).join('')}<div class="time-option spacer"></div>`;
-      minuteWheel.innerHTML = `<div class="time-option spacer"></div>${minutes.map(minute => `<div class="time-option ${minute === activeMinute ? 'active' : ''}" data-wheel-minute="${minute}">${minute}</div>`).join('')}<div class="time-option spacer"></div>`;
+    function normalizeStartTime(value = '10:00') {
+      const latestStart = SETTINGS.workEnd * 60 - 10;
+      return minutesToTime(Math.min(timeToMinutes(normalizeWorkTime(value)), latestStart));
+    }
+    function normalizeEndTime(startTime, value = addMinutes(startTime, 60)) {
+      let endTime = normalizeWorkTime(value);
+      if (timeToMinutes(endTime) <= timeToMinutes(startTime)) endTime = addMinutes(startTime, 60);
+      if (timeToMinutes(endTime) > SETTINGS.workEnd * 60) endTime = minutesToTime(SETTINGS.workEnd * 60);
+      if (timeToMinutes(endTime) <= timeToMinutes(startTime)) endTime = addMinutes(startTime, 10);
+      return endTime;
+    }
+    function renderTimeWheels(startValue = entryTime.value || '10:00', endValue = entryEndTime.value || '11:00') {
+      const activeStart = normalizeStartTime(startValue);
+      const activeEnd = normalizeEndTime(activeStart, endValue);
+      const times = wheelTimes();
+      const startTimes = times.filter(time => timeToMinutes(time) < SETTINGS.workEnd * 60);
+      hourWheel.innerHTML = `<div class="time-option spacer"></div>${startTimes.map(time => `<div class="time-option ${time === activeStart ? 'active' : ''}" data-wheel-start="${time}">${time}</div>`).join('')}<div class="time-option spacer"></div>`;
+      minuteWheel.innerHTML = `<div class="time-option spacer"></div>${times.map(time => `<div class="time-option ${time === activeEnd ? 'active' : ''}" data-wheel-end="${time}">${time}</div>`).join('')}<div class="time-option spacer"></div>`;
       requestAnimationFrame(() => {
         hourWheel.querySelector('.time-option.active')?.scrollIntoView({ block: 'center' });
         minuteWheel.querySelector('.time-option.active')?.scrollIntoView({ block: 'center' });
       });
     }
     function updateTimeFromWheels() {
-      const hour = activeWheelValue(hourWheel, 'wheelHour') || '10';
-      const minute = activeWheelValue(minuteWheel, 'wheelMinute') || '00';
-      entryTime.value = `${hour}:${minute}`;
+      const startTime = normalizeStartTime(activeWheelValue(hourWheel, 'wheelStart') || entryTime.value || '10:00');
+      const rawEndTime = activeWheelValue(minuteWheel, 'wheelEnd') || entryEndTime.value || addMinutes(startTime, 60);
+      const endTime = normalizeEndTime(startTime, rawEndTime);
+      entryTime.value = startTime;
+      entryEndTime.value = endTime;
+      entryDuration.value = String(durationBetween(startTime, endTime));
+      if (endTime !== rawEndTime) renderTimeWheels(startTime, endTime);
     }
     function activeWheelValue(wheel, key) {
       const wheelRect = wheel.getBoundingClientRect();
@@ -1052,9 +1094,9 @@
       entryId.value = entry.id || '';
       entryDate.value = entry.date;
       titleInput.value = entry.title || '';
+      commentInput.value = entry.comment || '';
       setType(entry.type || 'mobile');
-      setTime(entry.startTime || '10:00');
-      setDuration(entry.allDay ? 'all' : String(entry.durationMinutes || 60));
+      setTime(entry.startTime || '10:00', entryEndTime(entry));
       overlay.classList.add('open');
       entrySheet.classList.add('open');
     }
@@ -1071,15 +1113,16 @@
         type: entryType.value,
         date: entryDate.value,
         startTime: entryTime.value,
-        durationMinutes: Number(entryDuration.value || 0),
-        allDay: entryAllDay.value === 'true'
+        endTime: entryEndTime.value,
+        durationMinutes: durationBetween(entryTime.value, entryEndTime.value),
+        allDay: false,
+        comment: commentInput.value.trim()
       };
       if (data.id) {
         state.entries = state.entries.map(entry => entry.id === data.id ? { ...entry, ...data, updatedAt: now } : entry);
       } else {
         state.entries.push({ ...data, id: uid(), createdAt: now, updatedAt: now });
       }
-      state.selectedDate = parseISODate(data.date);
       saveEntries();
       closeBottomSheet();
       render();
@@ -1094,10 +1137,14 @@
     function moveEntry(id, dateValue, timeValue) {
       const entry = entryById(id);
       if (!entry) return;
+      const duration = durationBetween(entry.startTime || '10:00', entryEndTime(entry));
+      const nextStartTime = timeValue || entry.startTime;
       state.entries = state.entries.map(item => item.id === id ? {
         ...item,
         date: dateValue,
-        startTime: timeValue || item.startTime,
+        startTime: nextStartTime,
+        endTime: timeValue ? normalizeEndTime(nextStartTime, addMinutes(nextStartTime, duration)) : entryEndTime(item),
+        durationMinutes: duration,
         updatedAt: new Date().toISOString()
       } : item);
       state.selectedDate = parseISODate(dateValue);
@@ -1218,7 +1265,6 @@
     overlay.addEventListener('click', closeBottomSheet);
     deleteBtn.addEventListener('click', deleteEntry);
     document.querySelectorAll('[data-type]').forEach(btn => btn.addEventListener('click', () => setType(btn.dataset.type)));
-    document.querySelectorAll('[data-duration]').forEach(btn => btn.addEventListener('click', () => setDuration(btn.dataset.duration)));
     const wheelTimers = new WeakMap();
     [hourWheel, minuteWheel].forEach(wheel => {
       wheel.addEventListener('scroll', () => {
@@ -1257,7 +1303,6 @@
       if (state.drag?.moved) return;
       const day = event.target.closest('.month-day');
       if (!day || event.target.closest('[data-id]')) return;
-      state.selectedDate = parseISODate(day.dataset.date);
       openSheetForNew(day.dataset.date, '10:00');
     });
     dayView.addEventListener('click', event => {
@@ -1275,10 +1320,10 @@
       const plusThree = addDays(today, 3);
       const now = new Date().toISOString();
       return [
-        { id: uid(), title: 'Завод BMW X6', type: 'mobile', date: toISODate(today), startTime: '17:00', durationMinutes: 60, allDay: false, createdAt: now, updatedAt: now },
-        { id: uid(), title: 'На базе Camry', type: 'base', date: toISODate(tomorrow), startTime: '12:00', durationMinutes: 120, allDay: false, createdAt: now, updatedAt: now },
-        { id: uid(), title: 'Стрижка', type: 'personal', date: toISODate(plusTwo), startTime: '14:30', durationMinutes: 60, allDay: false, createdAt: now, updatedAt: now },
-        { id: uid(), title: 'Выходной', type: 'personal', date: toISODate(plusThree), startTime: '10:00', durationMinutes: 0, allDay: true, createdAt: now, updatedAt: now }
+        { id: uid(), title: 'Завод BMW X6', type: 'mobile', date: toISODate(today), startTime: '17:00', endTime: '18:00', durationMinutes: 60, allDay: false, comment: 'Осмотреть переднее крыло.', createdAt: now, updatedAt: now },
+        { id: uid(), title: 'На базе Camry', type: 'base', date: toISODate(tomorrow), startTime: '12:00', endTime: '14:00', durationMinutes: 120, allDay: false, comment: '', createdAt: now, updatedAt: now },
+        { id: uid(), title: 'Стрижка', type: 'personal', date: toISODate(plusTwo), startTime: '14:30', endTime: '15:30', durationMinutes: 60, allDay: false, comment: '', createdAt: now, updatedAt: now },
+        { id: uid(), title: 'Выходной', type: 'personal', date: toISODate(plusThree), startTime: '10:00', endTime: '11:00', durationMinutes: 60, allDay: false, comment: '', createdAt: now, updatedAt: now }
       ];
     }
 
