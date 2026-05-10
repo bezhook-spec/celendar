@@ -701,7 +701,15 @@
     // storage
     function loadEntries() {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          console.warn('Saved calendar data is corrupted, loading demo entries instead.', error);
+          localStorage.setItem(`${STORAGE_KEY}-broken-${Date.now()}`, raw);
+        }
+      }
       const demo = demoEntries();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(demo));
       return demo;
@@ -979,7 +987,7 @@
       const allDay = value === 'all';
       entryAllDay.value = allDay ? 'true' : 'false';
       entryDuration.value = allDay ? '0' : value;
-      timeField.style.display = 'block';
+      timeField.style.display = allDay ? 'none' : 'block';
       document.querySelectorAll('[data-duration]').forEach(btn => btn.classList.toggle('active', btn.dataset.duration === value));
     }
     function setTime(value) {
