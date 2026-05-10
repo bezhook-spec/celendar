@@ -633,6 +633,7 @@
           </div>
         </div>
         <button class="install-btn" id="installBtn" type="button">Установить</button>
+        <button class="icon-btn" id="backupBtn" title="Скачать резервную копию">↓</button>
         <button class="icon-btn" id="resetBtn" title="Сбросить демо">↺</button>
       </div>
       <div class="nav-row">
@@ -745,6 +746,24 @@
     }
     function saveEntries() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
+    }
+    function downloadBackup() {
+      const exportedAt = new Date().toISOString();
+      const payload = {
+        app: 'PDR Календарь',
+        version: 1,
+        exportedAt,
+        entries: state.entries
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pdr-calendar-backup-${exportedAt.slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     }
     function resetDemo() {
       if (!confirm('Сбросить записи и вернуть демо?')) return;
@@ -1311,6 +1330,7 @@
         render();
       }
     });
+    backupBtn.addEventListener('click', downloadBackup);
     resetBtn.addEventListener('click', resetDemo);
     window.addEventListener('resize', syncTopbarHeight);
     monthView.addEventListener('click', event => {
